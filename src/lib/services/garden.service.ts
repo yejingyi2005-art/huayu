@@ -14,15 +14,13 @@ function generateInviteCode(): string {
 export const gardenService = {
   async create(name: string, userId: string): Promise<Garden> {
     const inviteCode = generateInviteCode();
+    const gardenId = crypto.randomUUID();
 
-    const { data: garden, error: gardenError } = await supabase
+    const { error: gardenError } = await supabase
       .from("gardens")
-      .insert({ name, invite_code: inviteCode })
-      .select()
-      .single();
+      .insert({ garden_id: gardenId, name, invite_code: inviteCode });
     if (gardenError) throw { code: "GARDEN_CREATE_FAILED", message: gardenError.message };
 
-    const gardenId = (garden as Garden).garden_id;
     const { error: memberError } = await supabase.from("garden_members").insert({
       garden_id: gardenId,
       user_id: userId,
@@ -30,7 +28,7 @@ export const gardenService = {
     });
     if (memberError) throw { code: "MEMBER_CREATE_FAILED", message: memberError.message };
 
-    return garden as Garden;
+    return { garden_id: gardenId, name, invite_code: inviteCode, created_at: new Date().toISOString(), status: "active" } as Garden;
   },
 
   async getById(id: string): Promise<Garden> {
