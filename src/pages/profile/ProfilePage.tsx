@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { savePhoto, getPhoto } from "../../lib/services/photo-store";
-import { useAuth } from "../../hooks/use-auth";
+import { useAuth } from "../../contexts/AuthContext";
 import { useGardens } from "../../hooks/use-garden";
 import { traceService } from "../../lib/services/trace.service";
 import type { Trace } from "../../lib/types";

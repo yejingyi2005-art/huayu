@@ -6,7 +6,7 @@ import type { TraceType, Emotion } from "../../lib/types";
 import { MOOD_WEATHER_MAP } from "../../lib/constants";
 import { savePhoto } from "../../lib/services/photo-store";
 import { traceService } from "../../lib/services/trace.service";
-import { useAuth } from "../../hooks/use-auth";
+import { useAuth } from "../../contexts/AuthContext";
 
 const emotions: { key: Emotion; label: string }[] = [
   { key: "happy", label: "开心" },

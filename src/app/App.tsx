@@ -9,7 +9,7 @@ import { TimelinePage } from "../pages/timeline/TimelinePage";
 import { MemoryBookPage } from "../pages/memory-book/MemoryBookPage";
 import { ProfilePage } from "../pages/profile/ProfilePage";
 import { BottomNav } from "../components/layout/BottomNav";
-import { useAuth } from "../hooks/use-auth";
+import { AuthProvider, useAuth } from "../contexts/AuthContext";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -23,20 +23,22 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
+export default function AppWrapper() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/gardens" element={<ProtectedLayout><GardensPage /></ProtectedLayout>} />
-        <Route path="/create" element={<ProtectedLayout><CreateGardenPage /></ProtectedLayout>} />
-        <Route path="/garden/:gardenId" element={<ProtectedLayout><GardenPage /></ProtectedLayout>} />
-        <Route path="/garden/:gardenId/trace" element={<ProtectedLayout><TracePage /></ProtectedLayout>} />
-        <Route path="/garden/:gardenId/timeline" element={<ProtectedLayout><TimelinePage /></ProtectedLayout>} />
-        <Route path="/garden/:gardenId/memory-book" element={<ProtectedLayout><MemoryBookPage /></ProtectedLayout>} />
-        <Route path="/profile" element={<ProtectedLayout><ProfilePage /></ProtectedLayout>} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/gardens" element={<ProtectedLayout><GardensPage /></ProtectedLayout>} />
+          <Route path="/create" element={<ProtectedLayout><CreateGardenPage /></ProtectedLayout>} />
+          <Route path="/garden/:gardenId" element={<ProtectedLayout><GardenPage /></ProtectedLayout>} />
+          <Route path="/garden/:gardenId/trace" element={<ProtectedLayout><TracePage /></ProtectedLayout>} />
+          <Route path="/garden/:gardenId/timeline" element={<ProtectedLayout><TimelinePage /></ProtectedLayout>} />
+          <Route path="/garden/:gardenId/memory-book" element={<ProtectedLayout><MemoryBookPage /></ProtectedLayout>} />
+          <Route path="/profile" element={<ProtectedLayout><ProfilePage /></ProtectedLayout>} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

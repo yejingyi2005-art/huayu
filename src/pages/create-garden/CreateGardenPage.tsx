@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Leaf, Users, Link, ArrowLeft, Check } from "lucide-react";
-import { useAuth } from "../../hooks/use-auth";
+import { useAuth } from "../../contexts/AuthContext";
 import { gardenService } from "../../lib/services/garden.service";
 
 export function CreateGardenPage() {

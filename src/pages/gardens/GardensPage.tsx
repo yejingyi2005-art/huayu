@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Leaf, Plus, LogOut, ChevronRight, DoorOpen, X } from "lucide-react";
-import { useAuth } from "../../hooks/use-auth";
+import { useAuth } from "../../contexts/AuthContext";
 import { useGardens } from "../../hooks/use-garden";
 import { gardenService } from "../../lib/services/garden.service";
 

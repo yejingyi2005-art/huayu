@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Leaf, Mail, Lock, ArrowLeft } from "lucide-react";
-import { authService } from "../../lib/services/auth.service";
+import { useAuth } from "../../contexts/AuthContext";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -10,6 +10,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
   const [error, setError] = useState("");
+  const { signIn, signUp } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +31,9 @@ export function LoginPage() {
 
     try {
       if (mode === "register") {
-        await authService.signUp(email.trim(), password, nickname.trim());
+        await signUp(email.trim(), password, nickname.trim());
       } else {
-        await authService.signIn(email.trim(), password);
+        await signIn(email.trim(), password);
       }
       navigate("/gardens");
     } catch (e) {
