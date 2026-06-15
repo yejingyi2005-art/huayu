@@ -6,18 +6,22 @@ export const authService = {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: { data: { nickname } },
     });
     if (authError) throw { code: "AUTH_CREATE_FAILED", message: authError.message };
     const userId = authData.user?.id;
     if (!userId) throw { code: "AUTH_NO_USER", message: "User creation returned no ID" };
 
-    const { data: profile, error: profileError } = await supabase
-      .from("users")
-      .insert({ user_id: userId, nickname })
-      .select()
-      .single();
-    if (profileError) throw { code: "PROFILE_CREATE_FAILED", message: profileError.message };
-    return profile as User;
+    for (let i = 0; i < 5; i++) {
+      const { data: profile } = await supabase
+        .from("users")
+        .select()
+        .eq("user_id", userId)
+        .single();
+      if (profile) return profile as User;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    throw { code: "PROFILE_CREATE_FAILED", message: "用户档案创建失败，请稍后重试" };
   },
 
   async signIn(email: string, password: string): Promise<User> {
