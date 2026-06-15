@@ -39,9 +39,12 @@ describe("timelineService.getByGarden", () => {
     const groups = await timelineService.getByGarden("g1");
 
     expect(groups).toHaveLength(3);
+    // Mar 2026 → spring 2026
     expect(groups[0]).toMatchObject({ year: 2026, season: "spring" });
+    // Dec 2025 → winter 2025
     expect(groups[1]).toMatchObject({ year: 2025, season: "winter" });
-    expect(groups[2]).toMatchObject({ year: 2026, season: "autumn" });
+    // Jul 2026 → summer 2026
+    expect(groups[2]).toMatchObject({ year: 2026, season: "summer" });
   });
 
   it("returns empty array when no traces", async () => {

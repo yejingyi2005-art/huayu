@@ -24,12 +24,13 @@ export const timelineService = {
       const date = new Date(trace.created_at);
       const year = date.getFullYear();
       const month = date.getMonth();
-      const seasonIndex = Math.floor(month / 3);
+      const seasonIndex = Math.floor(((month + 10) % 12) / 3);
       const season = SEASONS[seasonIndex] ?? "spring";
-      const key = `${year}-${season}`;
+      const groupYear = season === "winter" && month < 2 ? year - 1 : year;
+      const key = `${groupYear}-${season}`;
 
       if (!groups.has(key)) {
-        groups.set(key, { year, season, traces: [] });
+        groups.set(key, { year: groupYear, season, traces: [] });
       }
       const group = groups.get(key);
       if (group) group.traces.push(trace);
@@ -40,14 +41,17 @@ export const timelineService = {
 
   async getBySeason(gardenId: string, year: number, season: Season): Promise<Trace[]> {
     const seasonMonths: Record<Season, [number, number]> = {
-      spring: [3, 5],
-      summer: [6, 8],
-      autumn: [9, 11],
-      winter: [0, 2],
+      spring: [2, 4],
+      summer: [5, 7],
+      autumn: [8, 10],
+      winter: [11, 1],
     };
     const [startMonth, endMonth] = seasonMonths[season];
     const startDate = new Date(year, startMonth, 1).toISOString();
-    const endDate = new Date(year, endMonth + 1, 0, 23, 59, 59).toISOString();
+    const endDate = new Date(
+      season === "winter" ? year + 1 : year,
+      endMonth + 1, 0, 23, 59, 59,
+    ).toISOString();
 
     const { data, error } = await supabase
       .from("traces")

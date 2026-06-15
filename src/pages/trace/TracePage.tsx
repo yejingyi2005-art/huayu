@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Image, Type, Smile, X, Check } from "lucide-react";
+import { ArrowLeft, Image, Type, Smile, X, Check, Loader } from "lucide-react";
 import { motion } from "motion/react";
 import type { TraceType, Emotion } from "../../lib/types";
 import { MOOD_WEATHER_MAP } from "../../lib/constants";
+import { savePhoto } from "../../lib/services/photo-store";
 
 const emotions: { key: Emotion; label: string }[] = [
   { key: "happy", label: "开心" },
@@ -12,6 +13,35 @@ const emotions: { key: Emotion; label: string }[] = [
   { key: "sad", label: "难过" },
   { key: "surprised", label: "惊喜" },
 ];
+
+const MAX_IMG_WIDTH = 1200;
+const MAX_IMG_HEIGHT = 1200;
+const JPEG_QUALITY = 0.7;
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = document.createElement("img");
+    img.onload = () => {
+      let w = img.width;
+      let h = img.height;
+      if (w > MAX_IMG_WIDTH || h > MAX_IMG_HEIGHT) {
+        const ratio = Math.min(MAX_IMG_WIDTH / w, MAX_IMG_HEIGHT / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("Canvas not supported")); return; }
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", JPEG_QUALITY));
+    };
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 export function TracePage() {
   const { gardenId } = useParams();
@@ -22,38 +52,68 @@ export function TracePage() {
   const [selectedEmotion, setSelectedEmotion] = useState<Emotion | null>(null);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [photoCaption, setPhotoCaption] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 10 * 1024 * 1024) { alert("图片不能超过 10MB"); return; }
-    const reader = new FileReader();
-    reader.onload = () => setPhotoDataUrl(reader.result as string);
-    reader.readAsDataURL(file);
-  };
+    if (!file.type.startsWith("image/")) { setUploadError("请选择图片文件"); return; }
+    if (file.size > 10 * 1024 * 1024) { setUploadError("图片不能超过 10MB"); return; }
+    setUploading(true);
+    setUploadError("");
+    try {
+      const compressed = await compressImage(file);
+      setPhotoDataUrl(compressed);
+    } catch {
+      setUploadError("图片处理失败，请重试");
+    }
+    setUploading(false);
+    e.target.value = "";
+  }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (traceType === "text" && !text.trim()) return;
     if (traceType === "mood" && !selectedEmotion) return;
     if (traceType === "photo" && !photoDataUrl) return;
 
+    const traceId = crypto.randomUUID();
+    let content: string | { emotion: string } | { photoId: string; caption: string } = "";
+
+    if (traceType === "text") {
+      content = text.trim();
+    } else if (traceType === "mood" && selectedEmotion) {
+      content = { emotion: selectedEmotion };
+    } else if (traceType === "photo" && photoDataUrl) {
+      try {
+        await savePhoto(traceId, photoDataUrl);
+      } catch {
+        setUploadError("图片保存失败，存储空间可能不足");
+        return;
+      }
+      content = { photoId: traceId, caption: photoCaption };
+    }
+
     const trace = {
-      id: crypto.randomUUID(),
+      id: traceId,
       gardenId,
       type: traceType,
-      content: traceType === "text" ? text.trim() :
-               traceType === "photo" ? { url: photoDataUrl, caption: photoCaption } :
-               { emotion: selectedEmotion },
+      content,
       user: "你",
       time: "刚刚",
       createdAt: new Date().toISOString(),
     };
 
-    const existing = JSON.parse(localStorage.getItem("huayu_traces") || "[]");
-    existing.unshift(trace);
-    localStorage.setItem("huayu_traces", JSON.stringify(existing));
+    try {
+      const key = `huayu_traces_${gardenId}`;
+      const existing = JSON.parse(localStorage.getItem(key) || "[]");
+      existing.unshift(trace);
+      localStorage.setItem(key, JSON.stringify(existing));
+    } catch {
+      setUploadError("保存失败，存储空间不足");
+      return;
+    }
 
     setSaved(true);
     setTimeout(() => navigate(`/garden/${gardenId}`), 1500);
@@ -94,7 +154,7 @@ export function TracePage() {
             ]).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
-                onClick={() => setTraceType(key)}
+                onClick={() => { setTraceType(key); setUploadError(""); }}
                 className={`flex flex-col items-center gap-1 rounded-2xl border-2 p-4 transition ${
                   traceType === key ? "border-[#A8B6A3] bg-[#A8B6A3]/10" : "border-border bg-[#FFFDF7]"
                 }`}
@@ -134,7 +194,7 @@ export function TracePage() {
                 <div className="relative rounded-2xl border-2 border-border overflow-hidden">
                   <img src={photoDataUrl} alt="preview" className="w-full max-h-64 object-cover" />
                   <button
-                    onClick={() => { setPhotoDataUrl(null); setPhotoCaption(""); }}
+                    onClick={() => { setPhotoDataUrl(null); setPhotoCaption(""); setUploadError(""); }}
                     className="absolute right-2 top-2 rounded-full bg-black/40 p-1.5 text-white"
                   >
                     <X size={14} />
@@ -145,16 +205,29 @@ export function TracePage() {
                     placeholder="添加一段描述…"
                     className="w-full border-t border-border bg-[#FFFDF7] px-4 py-3 text-sm text-[#4C5148] placeholder:text-[#838777] focus:outline-none"
                   />
+                  <p className="border-t border-border px-4 py-2 text-[10px] text-[#B9B19F]">
+                    已压缩至 ~{Math.round(photoDataUrl.length * 0.75 / 1024)}KB
+                  </p>
+                </div>
+              ) : uploading ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#D9D2C3] bg-[#F8F7F2] px-6 py-12">
+                  <Loader size={24} className="animate-spin text-[#8EA085]" />
+                  <p className="text-sm text-[#707465]">正在处理图片...</p>
                 </div>
               ) : (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#D9D2C3] bg-[#F8F7F2] px-6 py-12 transition hover:border-[#A8B6A3]"
-                >
-                  <Image size={32} className="text-[#8EA085]" />
-                  <p className="text-sm text-[#707465]">点击选择照片</p>
-                  <p className="text-xs text-muted-foreground">支持 JPG / PNG，最大 10MB</p>
-                </button>
+                <div>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#D9D2C3] bg-[#F8F7F2] px-6 py-12 transition hover:border-[#A8B6A3]"
+                  >
+                    <Image size={32} className="text-[#8EA085]" />
+                    <p className="text-sm text-[#707465]">点击选择照片</p>
+                    <p className="text-xs text-muted-foreground">支持 JPG / PNG，最大 10MB</p>
+                  </button>
+                  {uploadError && (
+                    <p className="mt-2 rounded-xl bg-[#F6E8EC] px-4 py-2 text-xs text-[#B97979]">{uploadError}</p>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -184,17 +257,23 @@ export function TracePage() {
             </div>
           )}
 
+          {/* Error message */}
+          {uploadError && (
+            <p className="mt-4 rounded-xl bg-[#F6E8EC] px-4 py-2.5 text-xs text-[#B97979]">{uploadError}</p>
+          )}
+
           {/* Save button */}
           <button
             onClick={handleSave}
             disabled={
+              uploading ||
               (traceType === "text" && !text.trim()) ||
               (traceType === "mood" && !selectedEmotion) ||
               (traceType === "photo" && !photoDataUrl)
             }
             className="mt-6 w-full rounded-full border-2 border-[#8EA085] bg-primary px-5 py-3 text-primary-foreground transition duration-500 hover:-rotate-1 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            保存到花园
+            {uploading ? "处理中..." : "保存到花园"}
           </button>
         </div>
       </div>

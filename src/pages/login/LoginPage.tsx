@@ -28,13 +28,15 @@ export function LoginPage() {
     }
 
     // Simulate auth — stores user in localStorage for MVP
+    const userNickname = mode === "register" ? nickname.trim() : (email.split("@")[0] || "");
     const user = {
       id: crypto.randomUUID(),
       email: email.trim(),
-      nickname: mode === "register" ? nickname.trim() : email.split("@")[0],
+      nickname: userNickname,
       created_at: new Date().toISOString(),
     };
     localStorage.setItem("huayu_user", JSON.stringify(user));
+    localStorage.setItem("huayu_nickname", userNickname);
     navigate("/gardens");
   };
 

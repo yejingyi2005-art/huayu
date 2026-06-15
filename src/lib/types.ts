@@ -4,7 +4,7 @@ export type Weather = "sunny" | "breeze" | "overcast" | "lightRain" | "rainbow";
 export type Season = "spring" | "summer" | "autumn" | "winter";
 export type GardenStatus = "active" | "archived";
 export type GardenRole = "owner" | "member";
-export type CropType = "clover" | "sunflower" | "rose" | "lotus";
+export type CropType = "clover" | "sunflower" | "rose" | "lotus" | "chinaRose" | "lavender" | "orchid" | "pearBlossom";
 export type CropStage = "seed" | "sprout" | "growing" | "bloom";
 
 export interface User {
@@ -74,6 +74,7 @@ export interface MemoryRing {
   radius: number;
   tracesCount: number;
   summary: string;
+  dominantWeather: Weather;
 }
 
 export interface GardenState {
