@@ -3,7 +3,9 @@ import { useParams, useNavigate } from "react-router";
 import { Leaf, Plus, Clock, Trees, Sun, Wind, CloudRain, Cloud, Sparkles, ChevronDown, Heart } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { type CropType, type CropStage, type GardenCrop, type MemoryRing, type Weather } from "../../lib/types";
+import type { Trace } from "../../lib/types";
 import { GardenScene } from "../../components/garden/GardenScene";
+import { traceService } from "../../lib/services/trace.service";
 import { PhotoImg } from "../../components/PhotoImg";
 import { Clover } from "../../components/garden/crops/Clover";
 import { Sunflower } from "../../components/garden/crops/Sunflower";
@@ -142,6 +144,18 @@ interface SavedTrace {
   createdAt: string;
 }
 
+function toSavedTrace(t: Trace): SavedTrace {
+  let content: SavedTrace["content"];
+  if (t.type === "text") {
+    content = t.content.body ?? "";
+  } else if (t.type === "photo") {
+    content = { photoId: t.content.photoId ?? t.trace_id, caption: t.content.caption };
+  } else {
+    content = { emotion: t.content.emotion ?? "calm" };
+  }
+  return { id: t.trace_id, type: t.type, user: "", time: "", content, createdAt: t.created_at };
+}
+
 export function GardenPage() {
   const { gardenId } = useParams();
   const navigate = useNavigate();
@@ -182,24 +196,30 @@ export function GardenPage() {
   }, [savedTraces, selectedRing, ringDetailOpen, garden.rings]);
 
   useEffect(() => {
+    if (!gardenId) return;
     const storageKey = `huayu_last_visit_${gardenId}`;
-    const stored = JSON.parse(localStorage.getItem(`huayu_traces_${gardenId}`) || "[]");
-    setSavedTraces(stored);
-    const lastVisit = localStorage.getItem(storageKey);
-    const nowMs = Date.now();
-    if (lastVisit) {
-      const daysAgo = Math.floor((nowMs - Number(lastVisit)) / 86400000);
-      const lastVisitDate = new Date(Number(lastVisit));
-      const lastSeason = seasonLabel(lastVisitDate.getMonth() + 1);
-      const currentSeason = seasonLabel(new Date().getMonth() + 1);
-      const oldTraceCount = stored.filter((t: SavedTrace) => new Date(t.createdAt).getTime() > Number(lastVisit)).length;
-      if (daysAgo >= 1) {
-        setReunion({ show: true, days: daysAgo, newTraces: oldTraceCount, lastSeason, currentSeason });
-        const timer = setTimeout(() => setReunion(null), 6000);
-        return () => clearTimeout(timer);
+    let cancelled = false;
+    traceService.getByGarden(gardenId).then((traces) => {
+      if (cancelled) return;
+      const stored = traces.map(toSavedTrace);
+      setSavedTraces(stored);
+      const lastVisit = localStorage.getItem(storageKey);
+      const nowMs = Date.now();
+      if (lastVisit) {
+        const daysAgo = Math.floor((nowMs - Number(lastVisit)) / 86400000);
+        const lastVisitDate = new Date(Number(lastVisit));
+        const lastSeason = seasonLabel(lastVisitDate.getMonth() + 1);
+        const currentSeason = seasonLabel(new Date().getMonth() + 1);
+        const newTraceCount = stored.filter((t) => new Date(t.createdAt).getTime() > Number(lastVisit)).length;
+        if (daysAgo >= 1) {
+          setReunion({ show: true, days: daysAgo, newTraces: newTraceCount, lastSeason, currentSeason });
+          const timer = setTimeout(() => setReunion(null), 6000);
+          return () => clearTimeout(timer);
+        }
       }
-    }
-    localStorage.setItem(storageKey, String(nowMs));
+      localStorage.setItem(storageKey, String(nowMs));
+    });
+    return () => { cancelled = true; };
   }, [gardenId]);
 
   return (

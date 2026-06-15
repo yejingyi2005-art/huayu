@@ -7,17 +7,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { savePhoto, getPhoto } from "../../lib/services/photo-store";
-
-interface SavedTrace {
-  id: string; type: "photo" | "text" | "mood";
-  user: string; time: string;
-  content: string | { url: string; caption?: string } | { emotion: string };
-  createdAt: string;
-}
-
-interface SavedGarden {
-  id: string; name: string; createdAt: string; memberCount: number; traceCount: number;
-}
+import { useAuth } from "../../hooks/use-auth";
+import { useGardens } from "../../hooks/use-garden";
+import { traceService } from "../../lib/services/trace.service";
+import type { Trace } from "../../lib/types";
 
 const emotionIcons: Record<string, typeof Smile> = {
   happy: Smile, calm: Meh, tired: Meh, sad: Frown, surprised: Sparkles,
@@ -52,32 +45,35 @@ function compressAvatar(file: File): Promise<string> {
 
 export function ProfilePage() {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<"profile" | "stats" | "settings">("profile");
   const [darkMode, setDarkMode] = useState(false);
   const [editingNickname, setEditingNickname] = useState(false);
-  const [nickname, setNickname] = useState(localStorage.getItem("huayu_nickname") || "花屿用户");
+  const [nickname, setNickname] = useState(user?.nickname ?? "花屿用户");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [now] = useState(Date.now);
+  const [allTraces, setAllTraces] = useState<Trace[]>([]);
 
-  const gardens: SavedGarden[] = useMemo(() => {
-    const g = localStorage.getItem("huayu_gardens");
-    return g ? JSON.parse(g) : [];
-  }, []);
+  const { gardens } = useGardens(user?.user_id);
 
-  const traces: SavedTrace[] = useMemo(() => {
-    const all: SavedTrace[] = [];
-    for (const garden of gardens) {
-      try {
-        const key = `huayu_traces_${garden.id}`;
-        const items = JSON.parse(localStorage.getItem(key) || "[]");
-        all.push(...items);
-      } catch { /* garden has no traces yet */ }
-    }
-    return all;
+  useEffect(() => {
+    if (!gardens.length) return;
+    let cancelled = false;
+    Promise.all(gardens.map((g) => traceService.getByGarden(g.garden_id))).then((results) => {
+      if (cancelled) return;
+      setAllTraces(results.flat());
+    });
+    return () => { cancelled = true; };
   }, [gardens]);
+
+  useEffect(() => {
+    if (user?.nickname) setNickname(user.nickname);
+  }, [user?.nickname]);
+
+  const traces = allTraces;
 
   const stats = useMemo(() => {
     const photoCount = traces.filter((t) => t.type === "photo").length;
@@ -85,14 +81,13 @@ export function ProfilePage() {
     const moodCount = traces.filter((t) => t.type === "mood").length;
     const moodEmotions: Record<string, number> = {};
     for (const t of traces) {
-      if (t.type === "mood" && typeof t.content === "object" && "emotion" in t.content) {
-        const e = t.content.emotion as string;
-        moodEmotions[e] = (moodEmotions[e] ?? 0) + 1;
+      if (t.type === "mood" && t.content.emotion) {
+        moodEmotions[t.content.emotion] = (moodEmotions[t.content.emotion] ?? 0) + 1;
       }
     }
     const sortedMoods = Object.entries(moodEmotions).sort((a, b) => b[1] - a[1]);
     const dominantMood = sortedMoods[0]?.[0] ?? "calm";
-    const firstDate = traces.length > 0 ? Math.min(...traces.map((t) => new Date(t.createdAt).getTime())) : now;
+    const firstDate = traces.length > 0 ? Math.min(...traces.map((t) => new Date(t.created_at).getTime())) : now;
     const daysSinceFirst = Math.max(1, Math.floor((now - firstDate) / 86400000));
     return { photoCount, textCount, moodCount, dominantMood, sortedMoods, daysSinceFirst, totalTraces: traces.length };
   }, [traces, now]);
@@ -128,22 +123,19 @@ export function ProfilePage() {
     else document.documentElement.classList.remove("dark");
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("huayu_user");
+  const handleLogout = async () => {
+    await signOut();
     navigate("/login");
   };
 
   const handleClearData = () => {
-    if (confirm("确定要清除所有本地数据吗？此操作不可撤销。")) {
-      for (const garden of gardens) {
-        localStorage.removeItem(`huayu_traces_${garden.id}`);
-      }
+    if (confirm("确定要清除所有数据吗？此操作不可撤销。")) {
       window.location.reload();
     }
   };
 
   const handleExportData = () => {
-    const data = { traces, gardens, exportedAt: new Date().toISOString() };
+    const data = { traces, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -211,8 +203,8 @@ export function ProfilePage() {
                       autoFocus
                       value={nickname}
                       onChange={(e) => setNickname(e.target.value)}
-                      onBlur={() => { localStorage.setItem("huayu_nickname", nickname); setEditingNickname(false); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { localStorage.setItem("huayu_nickname", nickname); setEditingNickname(false); } }}
+                      onBlur={() => setEditingNickname(false)}
+                      onKeyDown={(e) => { if (e.key === "Enter") setEditingNickname(false); }}
                       className="w-40 rounded-lg border-2 border-[#8EA085] bg-white px-3 py-1 text-center text-lg font-medium text-[#596650] outline-none"
                     />
                   ) : (
@@ -234,8 +226,8 @@ export function ProfilePage() {
                 <div className="space-y-2">
                   {gardens.map((g) => (
                     <div
-                      key={g.id}
-                      onClick={() => navigate(`/garden/${g.id}`)}
+                      key={g.garden_id}
+                      onClick={() => navigate(`/garden/${g.garden_id}`)}
                       className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-[#F0EFE8]/40 p-3 transition hover:bg-[#F0EFE8]"
                     >
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#A8B6A3]/20">
@@ -243,7 +235,7 @@ export function ProfilePage() {
                       </div>
                       <div className="flex-1">
                         <p className="text-sm text-[#596650]">{g.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{g.memberCount} 人 · {g.traceCount} 条痕迹</p>
+                        <p className="text-[10px] text-muted-foreground">{Math.max(1, Math.floor((Date.now() - new Date(g.created_at).getTime()) / 86400000))} 天</p>
                       </div>
                     </div>
                   ))}

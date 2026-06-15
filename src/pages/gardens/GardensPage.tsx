@@ -1,65 +1,45 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Leaf, Plus, LogOut, ChevronRight, DoorOpen, X } from "lucide-react";
-
-interface GardenInfo {
-  id: string; name: string; type: string;
-  inviteCode: string; createdAt: string;
-  memberCount: number; memberNames: string[];
-}
-
-function loadGardens(): GardenInfo[] {
-  try { return JSON.parse(localStorage.getItem("huayu_gardens") || "[]"); }
-  catch { return []; }
-}
-
-function saveGardens(gardens: GardenInfo[]) {
-  localStorage.setItem("huayu_gardens", JSON.stringify(gardens));
-}
+import { useAuth } from "../../hooks/use-auth";
+import { useGardens } from "../../hooks/use-garden";
+import { gardenService } from "../../lib/services/garden.service";
 
 export function GardensPage() {
   const navigate = useNavigate();
-  const [user, setUser] = useState<{ nickname: string } | null>(null);
-  const [gardens, setGardens] = useState<GardenInfo[]>([]);
+  const { user, signOut } = useAuth();
+  const { gardens, loading } = useGardens(user?.user_id);
   const [showJoin, setShowJoin] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
-  const [now] = useState(Date.now);
 
-  useEffect(() => {
-    const raw = localStorage.getItem("huayu_user");
-    if (raw) setUser(JSON.parse(raw));
-    setGardens(loadGardens());
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("huayu_user");
+  const handleLogout = async () => {
+    await signOut();
     navigate("/login");
   };
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const code = joinCode.trim().toUpperCase();
     if (!code) { setJoinError("请输入邀请码"); return; }
-    const all = loadGardens();
-    const target = all.find((g) => g.inviteCode === code);
-    if (!target) { setJoinError("邀请码无效，请确认后重试"); return; }
-    if (target.memberNames.includes("我")) { setJoinError("你已经在这个花园中了"); return; }
-    target.memberCount += 1;
-    target.memberNames.push("我");
-    saveGardens(all);
-    setGardens(loadGardens());
-    setShowJoin(false);
-    setJoinCode("");
-    setJoinError("");
+    if (!user) return;
+    try {
+      await gardenService.join(code, user.user_id);
+      setShowJoin(false);
+      setJoinCode("");
+      setJoinError("");
+    } catch {
+      setJoinError("邀请码无效，请确认后重试");
+    }
   };
 
   const dayCount = (createdAt: string) =>
-    Math.max(1, Math.floor((now - new Date(createdAt).getTime()) / 86400000));
+    Math.max(1, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000));
+
+  if (loading) return null;
 
   return (
     <main className="min-h-dvh bg-background bg-[linear-gradient(90deg,rgba(217,210,195,0.22)_1px,transparent_1px),linear-gradient(rgba(217,210,195,0.18)_1px,transparent_1px)] bg-[size:34px_34px]">
       <div className="mx-auto max-w-lg px-5 py-6" style={{ paddingBottom: "calc(80px + var(--sab, 0px))" }}>
-        {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Leaf size={18} className="text-[#8EA085]" />
@@ -85,7 +65,6 @@ export function GardensPage() {
           )}
         </div>
 
-        {/* Join panel */}
         {showJoin && (
           <div className="mt-4 rounded-[1.75rem] border-2 border-[#D9C892] bg-[#F4E9C8]/60 p-4">
             <div className="flex items-center justify-between mb-3">
@@ -112,7 +91,6 @@ export function GardensPage() {
           </div>
         )}
 
-        {/* Garden list */}
         <div className="mt-6 space-y-4">
           {gardens.length === 0 ? (
             <div className="rounded-[1.75rem] border-2 border-dashed border-[#D9D2C3] bg-[#FFFDF7]/50 p-10 text-center">
@@ -123,8 +101,8 @@ export function GardensPage() {
           ) : (
             gardens.map((g) => (
               <button
-                key={g.id}
-                onClick={() => navigate(`/garden/${g.id}`)}
+                key={g.garden_id}
+                onClick={() => navigate(`/garden/${g.garden_id}`)}
                 className="flex w-full items-center gap-4 rounded-[1.75rem] border-2 border-border bg-[#FFFDF7]/80 p-5 text-left transition active:scale-[0.98]"
               >
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-[#F8F7F2]">
@@ -133,8 +111,7 @@ export function GardensPage() {
                 <div className="flex-1">
                   <p className="font-medium text-[#596650]">{g.name}</p>
                   <p className="mt-0.5 text-xs text-[#838777]">
-                    {g.memberCount} 人 · {dayCount(g.createdAt)} 天
-                    {g.memberNames.length > 0 && ` · ${g.memberNames.join("、")}`}
+                    {dayCount(g.created_at)} 天
                   </p>
                 </div>
                 <ChevronRight size={18} className="text-[#D9D2C3]" />
@@ -143,7 +120,6 @@ export function GardensPage() {
           )}
         </div>
 
-        {/* Create new */}
         <button
           onClick={() => navigate("/create")}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-[1.75rem] border-2 border-dashed border-[#D9D2C3] bg-[#FFFDF7]/50 px-5 py-4 text-[#596650] transition active:scale-[0.98]"

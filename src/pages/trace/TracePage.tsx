@@ -5,6 +5,8 @@ import { motion } from "motion/react";
 import type { TraceType, Emotion } from "../../lib/types";
 import { MOOD_WEATHER_MAP } from "../../lib/constants";
 import { savePhoto } from "../../lib/services/photo-store";
+import { traceService } from "../../lib/services/trace.service";
+import { useAuth } from "../../hooks/use-auth";
 
 const emotions: { key: Emotion; label: string }[] = [
   { key: "happy", label: "开心" },
@@ -46,6 +48,7 @@ function compressImage(file: File): Promise<string> {
 export function TracePage() {
   const { gardenId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [traceType, setTraceType] = useState<TraceType>("text");
   const [text, setText] = useState("");
@@ -74,44 +77,24 @@ export function TracePage() {
   }, []);
 
   const handleSave = async () => {
+    if (!gardenId || !user) return;
     if (traceType === "text" && !text.trim()) return;
     if (traceType === "mood" && !selectedEmotion) return;
     if (traceType === "photo" && !photoDataUrl) return;
 
     const traceId = crypto.randomUUID();
-    let content: string | { emotion: string } | { photoId: string; caption: string } = "";
-
-    if (traceType === "text") {
-      content = text.trim();
-    } else if (traceType === "mood" && selectedEmotion) {
-      content = { emotion: selectedEmotion };
-    } else if (traceType === "photo" && photoDataUrl) {
-      try {
-        await savePhoto(traceId, photoDataUrl);
-      } catch {
-        setUploadError("图片保存失败，存储空间可能不足");
-        return;
-      }
-      content = { photoId: traceId, caption: photoCaption };
-    }
-
-    const trace = {
-      id: traceId,
-      gardenId,
-      type: traceType,
-      content,
-      user: "你",
-      time: "刚刚",
-      createdAt: new Date().toISOString(),
-    };
 
     try {
-      const key = `huayu_traces_${gardenId}`;
-      const existing = JSON.parse(localStorage.getItem(key) || "[]");
-      existing.unshift(trace);
-      localStorage.setItem(key, JSON.stringify(existing));
+      if (traceType === "text") {
+        await traceService.create(gardenId, user.user_id, "text", { body: text.trim() });
+      } else if (traceType === "mood" && selectedEmotion) {
+        await traceService.create(gardenId, user.user_id, "mood", { emotion: selectedEmotion });
+      } else if (traceType === "photo" && photoDataUrl) {
+        await savePhoto(traceId, photoDataUrl);
+        await traceService.create(gardenId, user.user_id, "photo", { photoId: traceId, caption: photoCaption });
+      }
     } catch {
-      setUploadError("保存失败，存储空间不足");
+      setUploadError("保存失败，请重试");
       return;
     }
 
@@ -145,7 +128,6 @@ export function TracePage() {
         </div>
 
         <div className="rounded-[2rem] border-2 border-border bg-[#FFFDF7]/80 p-6">
-          {/* Type Selector */}
           <div className="mb-6 grid grid-cols-3 gap-2">
             {([
               { key: "text" as TraceType, label: "文字", icon: Type },
@@ -165,7 +147,6 @@ export function TracePage() {
             ))}
           </div>
 
-          {/* Text input */}
           {traceType === "text" && (
             <div>
               <textarea
@@ -180,7 +161,6 @@ export function TracePage() {
             </div>
           )}
 
-          {/* Photo upload */}
           {traceType === "photo" && (
             <div>
               <input
@@ -232,7 +212,6 @@ export function TracePage() {
             </div>
           )}
 
-          {/* Mood picker */}
           {traceType === "mood" && (
             <div className="space-y-3">
               <p className="text-sm text-[#707465]">今天的心情是？</p>
@@ -257,12 +236,10 @@ export function TracePage() {
             </div>
           )}
 
-          {/* Error message */}
           {uploadError && (
             <p className="mt-4 rounded-xl bg-[#F6E8EC] px-4 py-2.5 text-xs text-[#B97979]">{uploadError}</p>
           )}
 
-          {/* Save button */}
           <button
             onClick={handleSave}
             disabled={

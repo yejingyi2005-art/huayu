@@ -1,57 +1,32 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Leaf, Users, Link, ArrowLeft, Check } from "lucide-react";
-
-type GardenType = "duo" | "group";
-
-interface GardenInfo {
-  id: string; name: string; type: GardenType;
-  inviteCode: string; createdAt: string;
-  memberCount: number; memberNames: string[];
-}
-
-function loadGardens(): GardenInfo[] {
-  try { return JSON.parse(localStorage.getItem("huayu_gardens") || "[]"); }
-  catch { return []; }
-}
-
-function saveGardens(gardens: GardenInfo[]) {
-  localStorage.setItem("huayu_gardens", JSON.stringify(gardens));
-}
+import { useAuth } from "../../hooks/use-auth";
+import { gardenService } from "../../lib/services/garden.service";
 
 export function CreateGardenPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [name, setName] = useState("");
-  const [type, setType] = useState<GardenType>("duo");
-  const [garden, setGarden] = useState<GardenInfo | null>(null);
+  const [type, setType] = useState<"duo" | "group">("duo");
+  const [inviteCode, setInviteCode] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const handleCreate = () => {
-    if (!name.trim()) return;
-    const id = crypto.randomUUID().slice(0, 8);
-    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const newGarden: GardenInfo = {
-      id, name: name.trim(), type,
-      inviteCode: code,
-      createdAt: new Date().toISOString(),
-      memberCount: 1, memberNames: ["我"],
-    };
-    const all = loadGardens();
-    all.push(newGarden);
-    saveGardens(all);
-    setGarden(newGarden);
+  const handleCreate = async () => {
+    if (!name.trim() || !user) return;
+    const garden = await gardenService.create(name.trim(), user.user_id);
+    setInviteCode(garden.invite_code);
   };
 
   const handleCopy = () => {
-    if (!garden) return;
-    const text = `🏡 花屿 · ${garden.name}\n邀请码：${garden.inviteCode}\n在「花屿」App 中输入邀请码即可加入我们`;
+    const text = `🏡 花屿 · ${name}\n邀请码：${inviteCode}\n在「花屿」App 中输入邀请码即可加入我们`;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   };
 
-  if (garden) {
+  if (inviteCode) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background bg-[linear-gradient(90deg,rgba(217,210,195,0.22)_1px,transparent_1px),linear-gradient(rgba(217,210,195,0.18)_1px,transparent_1px)] bg-[size:34px_34px] p-5">
         <div className="w-full max-w-md rounded-[2rem] border-2 border-border bg-[#FFFDF7]/80 p-8 text-center">
@@ -59,7 +34,7 @@ export function CreateGardenPage() {
           <h1 className="font-['Long_Cang'] text-4xl text-[#596650]">花园已创建</h1>
           <p className="mt-3 text-sm text-[#707465]">分享邀请码，让朋友加入</p>
           <div className="mt-6 rounded-2xl border-2 border-dashed border-[#D9D2C3] bg-[#F8F7F2] px-6 py-4">
-            <p className="font-mono text-2xl tracking-[0.3em] text-[#596650]">{garden.inviteCode}</p>
+            <p className="font-mono text-2xl tracking-[0.3em] text-[#596650]">{inviteCode}</p>
           </div>
           <button
             onClick={handleCopy}

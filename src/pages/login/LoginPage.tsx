@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Leaf, Mail, Lock, ArrowLeft } from "lucide-react";
+import { authService } from "../../lib/services/auth.service";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -27,17 +28,16 @@ export function LoginPage() {
       return;
     }
 
-    // Simulate auth — stores user in localStorage for MVP
-    const userNickname = mode === "register" ? nickname.trim() : (email.split("@")[0] || "");
-    const user = {
-      id: crypto.randomUUID(),
-      email: email.trim(),
-      nickname: userNickname,
-      created_at: new Date().toISOString(),
-    };
-    localStorage.setItem("huayu_user", JSON.stringify(user));
-    localStorage.setItem("huayu_nickname", userNickname);
-    navigate("/gardens");
+    try {
+      if (mode === "register") {
+        await authService.signUp(email.trim(), password, nickname.trim());
+      } else {
+        await authService.signIn(email.trim(), password);
+      }
+      navigate("/gardens");
+    } catch (e) {
+      setError((e as { message?: string }).message ?? "操作失败");
+    }
   };
 
   return (

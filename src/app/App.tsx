@@ -9,9 +9,11 @@ import { TimelinePage } from "../pages/timeline/TimelinePage";
 import { MemoryBookPage } from "../pages/memory-book/MemoryBookPage";
 import { ProfilePage } from "../pages/profile/ProfilePage";
 import { BottomNav } from "../components/layout/BottomNav";
+import { useAuth } from "../hooks/use-auth";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const user = localStorage.getItem("huayu_user");
+  const { user, loading } = useAuth();
+  if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
   return (
     <div className="pb-20">
